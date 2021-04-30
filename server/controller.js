@@ -5,6 +5,8 @@ const path = require('path');
 const fse = require('fs-extra');
 const fs = require('fs');
 
+const extractExt = (filename) =>
+  filename.slice(filename.lastIndexOf('.'), filename.length); // 提取后缀名
 const UPLOAD_DIR = path.resolve(__dirname, '..', 'target');
 
 const pipeStream = (path, writeStream) =>
@@ -14,9 +16,9 @@ const pipeStream = (path, writeStream) =>
       fse.unlinkSync(path);
       resolve();
     });
-    readStream.on('data', (chunk) => {
-      console.log(`readStream.on('data'`, chunk);
-    });
+    // readStream.on('data', (chunk) => {
+    //   console.log(`readStream.on('data'`, chunk);
+    // });
     readStream.pipe(writeStream);
   });
 
@@ -29,19 +31,16 @@ const mergeFileChunk = async (filePath, fileName, size) => {
 
   await Promise.all(
     chunkPaths.map((chunkPath, index) => {
-      const writeStream = fse.createWriteStream(
-        path.resolve(UPLOAD_DIR, fileName),
-        {
-          start: index * size,
-          end: (index + 1) * size,
-        }
-      );
-      writeStream.on('drain', (chunk) => {
-        console.log('drain', chunk);
+      const writeStream = fse.createWriteStream(fileName, {
+        start: index * size,
+        end: (index + 1) * size,
       });
-      writeStream.on('error', (error) => {
-        console.log('writeStream', 'error', error);
-      });
+      // writeStream.on('drain', (chunk) => {
+      //   console.log('drain', chunk);
+      // });
+      // writeStream.on('error', (error) => {
+      //   console.log('writeStream', 'error', error);
+      // });
 
       return pipeStream(
         path.resolve(chunkDir, chunkPath),
@@ -66,14 +65,11 @@ const resolvePost = (req) =>
 
 class Controller {
   async handleMerge(req, res) {
-    const { filename, size } = await resolvePost(req);
-
-    let index = filename.lastIndexOf('.');
-    const fileDir = filename.slice(0, index);
-
-    const filePath = path.resolve(UPLOAD_DIR, fileDir);
-
-    await mergeFileChunk(filePath, filename, size);
+    const { filename, size, fileHash } = await resolvePost(req);
+    const ext = extractExt(filename);
+    const filePath = path.resolve(UPLOAD_DIR, `${fileHash}`);
+    const exportPath = path.resolve(UPLOAD_DIR, `${fileHash}${ext}`);
+    await mergeFileChunk(filePath, exportPath, size);
     return res.end(
       JSON.stringify({
         code: 0,
@@ -91,13 +87,26 @@ class Controller {
         res.end('process file chunk failed');
         return;
       }
+
       const [chunk] = files.chunk;
       const [hash] = fields.hash;
       const [filename] = fields.filename;
-      let index = filename.lastIndexOf('.');
-      const chunkName = filename.slice(0, index);
-      const chunkDir = path.resolve(UPLOAD_DIR, chunkName);
+      const [fileHash] = fields.fileHash;
+      console.log('fileHash', fileHash);
 
+      const filePath = path.resolve(
+        UPLOAD_DIR,
+        `${fileHash}${extractExt(filename)}`
+      );
+      console.log('filename', filename);
+      // let index = filename.lastIndexOf('.');
+      // const chunkName = filename.slice(0, index);
+      const chunkDir = path.resolve(UPLOAD_DIR, fileHash);
+      // 文件存在直接返回
+      if (fse.existsSync(filePath)) {
+        res.end('file exist');
+        return;
+      }
       if (!fse.existsSync(chunkDir)) {
         await fse.mkdirs(chunkDir);
       }
