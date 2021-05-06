@@ -22,7 +22,7 @@ const pipeStream = (path, writeStream) =>
     readStream.pipe(writeStream);
   });
 
-const mergeFileChunk = async (filePath, fileName, size) => {
+const mergeFileChunk = async (filePath, filename, size) => {
   const chunkDir = path.resolve(UPLOAD_DIR, filePath);
   const chunkPaths = await fse.readdir(chunkDir);
   // 根据切片下标进行排序
@@ -31,7 +31,7 @@ const mergeFileChunk = async (filePath, fileName, size) => {
 
   await Promise.all(
     chunkPaths.map((chunkPath, index) => {
-      const writeStream = fse.createWriteStream(fileName, {
+      const writeStream = fse.createWriteStream(filename, {
         start: index * size,
         end: (index + 1) * size,
       });
@@ -119,6 +119,23 @@ class Controller {
 
   async handleVerifyUpload(req, res) {
     // console.log(req, res);
+    const data = await resolvePost(req);
+    const { fileHash, filename } = data;
+    const ext = extractExt(filename);
+    const filePath = path.resolve(UPLOAD_DIR, `${fileHash}${ext}`);
+    if (fs.existsSync(filePath)) {
+      res.end(
+        JSON.stringify({
+          shouldUpload: false,
+        })
+      );
+    } else {
+      res.end(
+        JSON.stringify({
+          shouldUpload: true,
+        })
+      );
+    }
     return false;
   }
 }

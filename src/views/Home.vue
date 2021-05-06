@@ -145,13 +145,34 @@ export default defineComponent({
       await Promise.all(requestList);
       await this.mergeRequest();
     },
+    async handleVerify(filename: any, fileHash: any) {
+      const res: any = await this.request({
+        url: 'http://localhost:3000/verify',
+        headers: { 'content-type': 'application/json' },
+        data: JSON.stringify({
+          filename,
+          fileHash,
+        }),
+      });
+      return JSON.parse(res.data as string);
+    },
     async handleUpload() {
       if (!this.container.file) {
         return;
       }
       const fileChunkList = this.createFileChunk(this.container.file);
       (this.container.hash as any) = await this.calculateHash(fileChunkList);
-      console.log('fileChunksList', fileChunkList);
+      // 秒传
+      const { shouldUpload } = await this.handleVerify(
+        (this.container.file as any).name,
+        this.container.hash
+      );
+
+      if (!shouldUpload) {
+        (this as any).$message.success('秒传：上传成功');
+        return;
+      }
+
       (this.data as any[]) = fileChunkList.map(({ file }, index) => ({
         chunk: file,
         fileHash: this.container.hash,

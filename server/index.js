@@ -34,6 +34,10 @@ server.on('request', async (req, res) => {
     await controller.handleMerge(req, res);
   }
 
+  if (req.url === '/verify') {
+    await controller.handleVerifyUpload(req, res);
+  }
+
   if (req.url === '/') {
     await controller.handleFormData(req, res);
   }
