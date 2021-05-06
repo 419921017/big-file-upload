@@ -1,29 +1,31 @@
 <template>
   <div class="home">
-    <input type="file" @change="handleFileChange" />
-    <el-button @click="handleUpload">上传</el-button>
     <div>
-      <div>
-        <div>总进度</div>
-        <div>
-          <el-progress :percentage="uploadPercentage"></el-progress>
-        </div>
-      </div>
-
-      <el-table :data="data" style="width: 100%" row-key="hash">
-        <el-table-column label="hash">
-          <template #default="scope">{{ scope.row.hash }}</template>
-        </el-table-column>
-        <el-table-column label="size">
-          <template #default="scope">{{ scope.row.chunk.size }}</template>
-        </el-table-column>
-        <el-table-column label="process">
-          <template #default="scope">
-            <el-progress :percentage="scope.row.percentage"></el-progress
-          ></template>
-        </el-table-column>
-      </el-table>
+      <input type="file" @change="handleFileChange" />
+      <el-button @click="handleUpload">上传</el-button>
+      <el-button @click="handlePause" v-if="isPaused">暂停</el-button>
+      <el-button @click="handleResume" v-else>恢复</el-button>
     </div>
+    <div>
+      <div>总进度</div>
+      <div>
+        <el-progress :percentage="fakeUploadPercentage"></el-progress>
+      </div>
+    </div>
+
+    <el-table :data="data" style="width: 100%" row-key="hash">
+      <el-table-column label="hash">
+        <template #default="scope">{{ scope.row.hash }}</template>
+      </el-table-column>
+      <el-table-column label="size">
+        <template #default="scope">{{ scope.row.chunk.size }}</template>
+      </el-table-column>
+      <el-table-column label="process">
+        <template #default="scope">
+          <el-progress :percentage="scope.row.percentage"></el-progress>
+        </template>
+      </el-table-column>
+    </el-table>
   </div>
 </template>
 
@@ -54,6 +56,8 @@ export default defineComponent({
     hashPercentage: 0,
     data: [],
     requestList: [],
+    isPaused: false,
+    fakeUploadPercentage: 0,
   }),
   watch: {
     container: {
@@ -67,6 +71,11 @@ export default defineComponent({
       handler: function () {
         console.log('this.data.data', this.data);
       },
+    },
+    uploadPercentage(now) {
+      if (now > this.fakeUploadPercentage) {
+        this.fakeUploadPercentage = now;
+      }
     },
   },
   methods: {
@@ -127,6 +136,13 @@ export default defineComponent({
       this.requestList.forEach((xhr: XMLHttpRequest) => xhr?.abort);
       this.requestList = [];
     },
+    async handleResume() {
+      const { uploadedList } = await this.handleVerify(
+        (this.container.file as any).name,
+        this.container.hash
+      );
+      await this.uploadChunks(uploadedList);
+    },
     createFileChunk(file: any, size = SIZE) {
       let fileChunkList = [];
       let cur = 0;
@@ -136,8 +152,9 @@ export default defineComponent({
       }
       return fileChunkList;
     },
-    async uploadChunks() {
+    async uploadChunks(uploadedList = []) {
       const requestList = this.data
+        .filter(({ hash }) => !uploadedList.includes(hash))
         .map(({ chunk, hash, index, fileHash }) => {
           const formData = new FormData();
           formData.append('chunk', chunk);
@@ -155,7 +172,9 @@ export default defineComponent({
         });
 
       await Promise.all(requestList);
-      await this.mergeRequest();
+      if (uploadedList.length + requestList.length === this.data.length) {
+        await this.mergeRequest();
+      }
     },
     async handleVerify(filename: any, fileHash: any) {
       const res: any = await this.request({
@@ -175,7 +194,7 @@ export default defineComponent({
       const fileChunkList = this.createFileChunk(this.container.file);
       (this.container.hash as any) = await this.calculateHash(fileChunkList);
       // 秒传
-      const { shouldUpload } = await this.handleVerify(
+      const { shouldUpload, uploadedList } = await this.handleVerify(
         (this.container.file as any).name,
         this.container.hash
       );
@@ -190,11 +209,11 @@ export default defineComponent({
         fileHash: this.container.hash,
         hash: (this.container.file as any).name + '-' + index,
         index,
-        percentage: 0,
+        percentage: uploadedList.includes(index) ? 100 : 0,
       }));
       console.log('this.data', this.data);
 
-      await this.uploadChunks();
+      await this.uploadChunks(uploadedList);
     },
     async mergeRequest() {
       await this.request({

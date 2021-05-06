@@ -9,6 +9,12 @@ const extractExt = (filename) =>
   filename.slice(filename.lastIndexOf('.'), filename.length); // 提取后缀名
 const UPLOAD_DIR = path.resolve(__dirname, '..', 'target');
 
+const createUploadedList = async (fileHash) => {
+  fse.existsSync(path.resolve(UPLOAD_DIR, fileHash))
+    ? await fse.readdir(path.resolve(UPLOAD_DIR, fileHash))
+    : [];
+};
+
 const pipeStream = (path, writeStream) =>
   new Promise((resolve) => {
     const readStream = fse.createReadStream(path);
@@ -117,6 +123,8 @@ class Controller {
     });
   }
 
+  // 服务端已存在该文件，不需要再次上传
+  // 服务端不存在该文件或者已上传部分文件切片，通知前端进行上传，并把已上传的文件切片返回给前端
   async handleVerifyUpload(req, res) {
     // console.log(req, res);
     const data = await resolvePost(req);
@@ -133,6 +141,7 @@ class Controller {
       res.end(
         JSON.stringify({
           shouldUpload: true,
+          uploadedList: await createUploadedList(fileHash),
         })
       );
     }
