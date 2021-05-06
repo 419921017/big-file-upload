@@ -53,6 +53,7 @@ export default defineComponent({
     },
     hashPercentage: 0,
     data: [],
+    requestList: [],
   }),
   watch: {
     container: {
@@ -103,7 +104,14 @@ export default defineComponent({
 
         xhr.send(data);
 
-        xhr.onload = (e: any) => resolve(e.target.response);
+        xhr.onload = (e: any) => {
+          if (requestList) {
+            const xhrIndex = this.requestList.findIndex((item) => item === xhr);
+            this.requestList.splice(xhrIndex, 1);
+          }
+          resolve(e.target.response);
+        };
+        (this.requestList as any[]).push(xhr);
       });
     },
     handleFileChange(e: any) {
@@ -114,6 +122,10 @@ export default defineComponent({
       //   this.$options.data({ container: { file: null } })
       // );
       this.container.file = file;
+    },
+    handlePause() {
+      this.requestList.forEach((xhr: XMLHttpRequest) => xhr?.abort);
+      this.requestList = [];
     },
     createFileChunk(file: any, size = SIZE) {
       let fileChunkList = [];
